@@ -1,0 +1,159 @@
+// ==========================================================
+// PROYECTO: Line Follower ESP32 (DRV8833 + 74HC4051)
+// Autor: Juan De Dios Gastelum Gaxiola
+// ==========================================================
+
+#include <Arduino.h>
+
+// =================== CONFIGURACIÓN DE PINES ===================
+
+// Multiplexor 74HC4051 (para 8 sensores IR)
+constexpr int PIN_S0 = 4;  // LSB
+constexpr int PIN_S1 = 5;
+constexpr int PIN_S2 = 0;  // MSB
+constexpr int PIN_Y  = 1;  // salida común → digitalRead
+
+// Motores (DRV8833 en modo IN/IN)
+#define MA1_PIN 2   // Motor A1
+#define MA2_PIN 3   // Motor A2
+#define MB1_PIN 20  // Motor B1
+#define MB2_PIN 21  // Motor B2
+
+// =================== CONFIGURACIÓN ===================
+const int MAX_PWM = 180; // 0–255
+const int NUM_SENSORS = 8;
+
+const float Kp = 0.16; // proporcional
+const float Kd = 0.05; // derivativo
+
+const float BASE_SPEED_MIN = 0.36;
+const float BASE_SPEED_MAX = 0.60;
+const float MAX_CORRECTION = 0.33;
+
+constexpr uint32_t SETTLE_US = 5;   // estabilización del MUX
+constexpr uint32_t LOOP_DELAY_MS = 10;
+
+float lastError = 0.0;
+
+// =================== FUNCIONES DEL MUX ===================
+
+void selectChannel(uint8_t ch) {
+  digitalWrite(PIN_S0, (ch >> 0) & 1);
+  digitalWrite(PIN_S1, (ch >> 1) & 1);
+  digitalWrite(PIN_S2, (ch >> 2) & 1);
+}
+
+void readSensors(int sensors[NUM_SENSORS]) {
+  for (uint8_t ch = 0; ch < NUM_SENSORS; ++ch) {
+    selectChannel(ch);
+    delayMicroseconds(SETTLE_US);
+    sensors[ch] = digitalRead(PIN_Y);  // 1 = línea negra, 0 = fondo blanco
+  }
+}
+
+// =================== CONTROL DE MOTORES ===================
+
+void set_motor_speed(int pin_1, int pin_2, int speed) {
+    speed = constrain(speed, -MAX_PWM, MAX_PWM);
+
+    if (speed > 0) { // Adelante
+        analogWrite(pin_1, speed);
+        digitalWrite(pin_2, LOW);
+    } else if (speed < 0) { // Atrás
+        digitalWrite(pin_1, LOW);
+        analogWrite(pin_2, abs(speed));
+    } else { // Parado
+        digitalWrite(pin_1, LOW);
+        digitalWrite(pin_2, LOW);
+    }
+}
+
+void moverMotores(float leftNorm, float rightNorm) {
+  int leftPWM  = int(leftNorm * MAX_PWM);
+  int rightPWM = int(rightNorm * MAX_PWM);
+
+  // Ajustar sentido si invierte los motores
+  set_motor_speed(MA1_PIN, MA2_PIN, -leftPWM);
+  set_motor_speed(MB1_PIN, MB2_PIN, -rightPWM);
+}
+
+// =================== CONTROL PD ===================
+
+float computeLinePos(const int sensors[NUM_SENSORS]) {
+  static const float W[NUM_SENSORS] = {-3, -2, -1, 0, 0, 1, 2, 3};
+  float sumW = 0.0;
+  int active = 0;
+
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (sensors[i] == 1) {
+      sumW += W[i];
+      active++;
+    }
+  }
+
+  if (active == 0) return lastError;
+  return sumW / (active * 3.0);
+}
+
+// =================== SETUP ===================
+
+void setup() {
+  Serial.begin(115200);
+
+  // Pines MUX
+  pinMode(PIN_S0, OUTPUT);
+  pinMode(PIN_S1, OUTPUT);
+  pinMode(PIN_S2, OUTPUT);
+  pinMode(PIN_Y,  INPUT);
+
+  // Pines motores
+  pinMode(MA1_PIN, OUTPUT);
+  pinMode(MA2_PIN, OUTPUT);
+  pinMode(MB1_PIN, OUTPUT);
+  pinMode(MB2_PIN, OUTPUT);
+
+  Serial.println("🚗 Iniciando seguidor de línea (ESP32 + DRV8833 + MUX)...");
+}
+
+// =================== LOOP ===================
+
+void loop() {
+  int sensors[NUM_SENSORS];
+  readSensors(sensors);
+
+  // Calcular posición y error
+  float linePos = computeLinePos(sensors);
+  float derivative = linePos - lastError;
+  float correction = (Kp * linePos) + (Kd * derivative);
+  lastError = linePos;
+
+  // Frenado anticipado
+  float anticipation = min(1.0f, fabs(derivative) * 3.0f);
+  float baseSpeed = 0.58f - (0.20f + 0.12f * anticipation) * fabs(linePos);
+  baseSpeed = constrain(baseSpeed, BASE_SPEED_MIN, BASE_SPEED_MAX);
+
+  // Limitar corrección
+  correction = constrain(correction, -MAX_CORRECTION, MAX_CORRECTION);
+
+  // Velocidades finales
+  float leftSpeed  = baseSpeed - correction;
+  float rightSpeed = baseSpeed + correction;
+
+  moverMotores(leftSpeed, rightSpeed);
+
+  // DEBUG
+  static unsigned long lastPrint = 0;
+  if (millis() - lastPrint > 200) {
+    Serial.print("S: ");
+    for (int i = 0; i < NUM_SENSORS; i++) {
+      Serial.print(sensors[i]);
+      if (i < NUM_SENSORS - 1) Serial.print(",");
+    }
+    Serial.print(" | L="); Serial.print(leftSpeed, 2);
+    Serial.print(" R="); Serial.print(rightSpeed, 2);
+    Serial.print(" | Pos="); Serial.println(linePos, 2);
+    lastPrint = millis();
+  }
+
+  delay(LOOP_DELAY_MS);
+}
