@@ -1,0 +1,125 @@
+// ==========================================================
+// PINES DE CONTROL DE MOTORES (DRV8833 en modo IN/IN)
+// Mapeo basado en el esquemático (DRV8833)
+// ==========================================================
+// Motor Izquierdo (Motor A)
+// Motor Izquierdo (Motor A)
+#define MA1_PIN 2 // Pin MA1 (GPIO 18)
+#define MA2_PIN 3 // Pin MA2 (GPIO 19)
+
+// Motor Derecho (Motor B)
+#define MB1_PIN 20 // Pin MB1 (GPIO 20)
+#define MB2_PIN 21 // Pin MB2 (GPIO 21)
+
+// ==========================================================
+// CONFIGURACIÓN
+// ==========================================================
+// ¡ADVERTENCIA! analogWrite en ESP32 usa una resolución por defecto 
+// diferente a Arduino (típicamente 12 bits, lo que significa 0-4095).
+// Para compatibilidad y simplicidad, mantendremos el rango 0-255, 
+// lo que funcionará, pero no utilizará la resolución completa del chip.
+const int MAX_SPEED = 180; 
+
+// ==========================================================
+// FUNCIONES DE CONTROL
+// ==========================================================
+
+/**
+ * @brief Configura la velocidad de un motor usando analogWrite.
+ * @param pin_1 Pin GPIO para la dirección 1.
+ * @param pin_2 Pin GPIO para la dirección 2.
+ * @param speed Velocidad (0 a MAX_SPEED). Positivo = Adelante, Negativo = Atrás.
+ * si quiero que vaya mas lento un pulso mas grande 
+ */
+void set_motor_speed(int pin_1, int pin_2, int speed) {
+    // Asegurar que la velocidad esté dentro del rango [-MAX_SPEED, MAX_SPEED]
+    speed = constrain(speed, -MAX_SPEED, MAX_SPEED);
+
+    if (speed > 0) { // Movimiento Hacia Adelante
+        // Pin 1: PWM (Velocidad)
+        analogWrite(pin_1, speed);
+        // Pin 2: LOW (Dirección opuesta apagada)
+        digitalWrite(pin_2, LOW); 
+    } else if (speed < 0) { // Movimiento Hacia Atrás
+        // Pin 1: LOW (Dirección opuesta apagada)
+        digitalWrite(pin_1, LOW); 
+        // Pin 2: PWM (Velocidad en valor absoluto)
+        analogWrite(pin_2, abs(speed));
+    } else { // Detener (Frenado por corto circuito en DRV8833)
+        // Ambos pines a LOW para detener la rotación
+        digitalWrite(pin_1, LOW);
+        digitalWrite(pin_2, LOW);
+    }
+}
+
+void mover_atras(int speed) {
+    // Ambos motores giran hacia adelante (velocidad positiva)
+    set_motor_speed(MA1_PIN, MA2_PIN, speed);
+    set_motor_speed(MB1_PIN, MB2_PIN, speed);
+}
+
+void mover_adelante(int speed) {
+    // Ambos motores giran hacia atrás (velocidad negativa)
+    set_motor_speed(MA1_PIN, MA2_PIN, -speed);
+    set_motor_speed(MB1_PIN, MB2_PIN, -speed);
+}
+
+void girar_izquierda(int speed) {
+    // Motor Izquierdo (A) detenido o lento, Motor Derecho (B) rápido
+    set_motor_speed(MA1_PIN, MA2_PIN, speed * 0.2); // Gira más suave
+    set_motor_speed(MB1_PIN, MB2_PIN, speed);
+}
+
+void girar_derecha(int speed) {
+    // Motor Izquierdo (A) rápido, Motor Derecho (B) detenido o lento
+    set_motor_speed(MA1_PIN, MA2_PIN, speed);
+    set_motor_speed(MB1_PIN, MB2_PIN, speed * 0.2); // Gira más suave
+}
+
+void frenar() {
+    set_motor_speed(MA1_PIN, MA2_PIN, 0);
+    set_motor_speed(MB1_PIN, MB2_PIN, 0);
+}
+
+// ==========================================================
+// CÓDIGO ARDUINO SETUP Y LOOP
+// ==========================================================
+
+void setup() {
+    Serial.begin(115200);
+    
+    // Solo necesitamos configurar los pines como salidas
+    pinMode(MA1_PIN, OUTPUT);
+    pinMode(MA2_PIN, OUTPUT);
+    pinMode(MB1_PIN, OUTPUT);
+    pinMode(MB2_PIN, OUTPUT);
+
+    Serial.println("Motores configurados con analogWrite. Secuencia de prueba.");
+}
+
+void loop() {
+    int current_speed = 140; // Velocidad de prueba (entre 0 y 255)
+
+    Serial.println("Adelante..");
+    mover_adelante(current_speed);
+    delay(1000);
+
+    Serial.println("Derecha..");
+    girar_derecha(current_speed);
+    delay(500);
+
+    Serial.println("Izquierda..");
+    girar_izquierda(current_speed);
+    delay(500);
+
+    Serial.println("Pausa...");
+    frenar();
+    delay(2000);
+
+    
+    
+    /*Serial.println("Giro Derecha...");
+    girar_derecha(current_speed);
+    delay(2000);*/
+    
+}
