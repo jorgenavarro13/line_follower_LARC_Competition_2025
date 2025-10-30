@@ -21,9 +21,9 @@
 
 // === Parámetros de movimiento ===
 float baseSpeed = 128;    // velocidad base reducida
-float boostSpeed = 250;   // 🔸 velocidad boost reducida
-float Kp = 80;
-float Kd = 18;
+float boostSpeed = 180;   // 🔸 velocidad boost reducida
+float Kp = 85;
+float Kd = 20;
 
 const int pairCurveBoost = 20;
 const int blackMajority = 5;
@@ -210,7 +210,7 @@ void simpleLineFollower(int sensors[8]) {
                    (sensors[5] == LOW && sensors[6] == LOW);
 
   if (leftPair || rightPair) {
-    currentBaseSpeed *= 0.5;
+    currentBaseSpeed *= 0.7;
   }
 
   int leftSpeed  = currentBaseSpeed + correction;
