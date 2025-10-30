@@ -20,8 +20,8 @@
 #define BUTTON_PIN 14
 
 // === Parámetros de movimiento ===
-float baseSpeed = 120;    // velocidad base reducida
-float boostSpeed = 130;   // 🔸 velocidad boost reducida
+float baseSpeed = 150;    // velocidad base reducida
+float boostSpeed = 160;   // 🔸 velocidad boost reducida
 float Kp = 85;
 float Kd = 12;
 
@@ -148,7 +148,7 @@ void setMotorSpeeds(int leftSpeed, int rightSpeed) {
 // ALGORITMO DE SEGUIMIENTO DE LÍNEA
 // =====================================================
 void simpleLineFollower(int sensors[8]) {
-  float weights[8] = {-4.5, -3.2, -1, 0, 0, 1, 3.2, 4.5};
+  float weights[8] = {-6.7, -6.5, -4.0, 1, 1, 4.0, 6.5 , 6.7};
   int activeCount = 0;
   float weightedSum = 0;
   int blackCount = 0;
@@ -162,12 +162,12 @@ void simpleLineFollower(int sensors[8]) {
   }
 
   // === META (todos negros ≥ 0.2s) ===
-  if (blackCount >= 8) {
+  if (blackCount >= 7) {
     if (!allBlackDetected) {
       allBlackDetected = true;
       allBlackStartTime = millis();
       Serial.println("⬛ Todos los sensores en negro: conteo (0.2s)...");
-    } else if (!allBlackConfirmed && millis() - allBlackStartTime >= 200) {
+    } else if (!allBlackConfirmed && millis() - allBlackStartTime >= 100) {
       allBlackConfirmed = true;
       Serial.println("🏁 META CONFIRMADA. DETENIENDO...");
       setMotorSpeeds(0, 0);
@@ -210,7 +210,7 @@ void simpleLineFollower(int sensors[8]) {
                    (sensors[5] == LOW && sensors[6] == LOW);
 
   if (leftPair || rightPair) {
-    currentBaseSpeed *= 0.50;
+    currentBaseSpeed *= 0.99;
   }
 
   int leftSpeed  = currentBaseSpeed + correction;
